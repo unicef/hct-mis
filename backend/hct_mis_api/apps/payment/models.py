@@ -69,7 +69,7 @@ if TYPE_CHECKING:
     from hct_mis_api.apps.account.models import User
     from hct_mis_api.apps.core.exchange_rates.api import ExchangeRateClient
     from hct_mis_api.apps.geo.models import Area
-    from hct_mis_api.apps.program.models import Program
+    from hct_mis_api.apps.program.models import Programx
 
 logger = logging.getLogger(__name__)
 
@@ -385,6 +385,7 @@ class PaymentPlan(ConcurrencyModel, SoftDeletableModel, GenericPaymentPlan, Unic
         OPEN = "OPEN", "Open"
         LOCKED = "LOCKED", "Locked"
         LOCKED_FSP = "LOCKED_FSP", "Locked FSP"
+        ENTITLEMENT_SAVED = "ENTITLEMENT_SAVED", "Entitlement Saved"
         IN_APPROVAL = "IN_APPROVAL", "In Approval"
         IN_AUTHORIZATION = "IN_AUTHORIZATION", "In Authorization"
         IN_REVIEW = "IN_REVIEW", "In Review"
