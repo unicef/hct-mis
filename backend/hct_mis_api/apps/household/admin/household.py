@@ -1,6 +1,6 @@
 import logging
 from itertools import chain
-from typing import Any, List, Optional
+from typing import TYPE_CHECKING, Any, List, Optional
 from uuid import UUID
 
 from django.contrib import admin, messages
@@ -16,14 +16,14 @@ from django.utils.safestring import mark_safe
 from admin_cursor_paginator import CursorPaginatorAdmin
 from admin_extra_buttons.decorators import button
 from admin_extra_buttons.mixins import confirm_action
-from adminfilters.autocomplete import AutoCompleteFilter
+from adminfilters.autocomplete import LinkedAutoCompleteFilter
 from adminfilters.depot.widget import DepotManager
+from adminfilters.mixin import AdminFiltersMixin
 from adminfilters.querystring import QueryStringFilter
 from power_query.mixin import PowerQueryMixin
 from smart_admin.mixins import FieldsetMixin as SmartFieldsetMixin
 from smart_admin.mixins import LinkedObjectsMixin
 
-from hct_mis_api.apps.core.models import BusinessArea
 from hct_mis_api.apps.household.admin.mixins import (
     CustomTargetPopulationMixin,
     HouseholdWithDrawnMixin,
@@ -39,13 +39,15 @@ from hct_mis_api.apps.household.models import (
 )
 from hct_mis_api.apps.program.utils import enrol_household_to_program
 from hct_mis_api.apps.utils.admin import (
-    BusinessAreaForHouseholdCollectionListFilter,
     HOPEModelAdminBase,
     IsOriginalAdminMixin,
     LastSyncDateResetMixin,
     SoftDeletableAdminMixin,
 )
 from hct_mis_api.apps.utils.security import is_root
+
+if TYPE_CHECKING:
+    from django.contrib.admin.options import _DisplayT
 
 logger = logging.getLogger(__name__)
 
@@ -86,7 +88,8 @@ class HouseholdAdmin(
     )
     list_filter = (
         DepotManager,
-        ("business_area", AutoCompleteFilter),
+        ("business_area", LinkedAutoCompleteFilter.factory(parent=None)),
+        ("program", LinkedAutoCompleteFilter.factory(parent="business_area")),
         QueryStringFilter,
         "withdrawn",
     )
@@ -105,9 +108,12 @@ class HouseholdAdmin(
         "country",
         "country_origin",
         "head_of_household",
+        "household_collection",
         "registration_data_import",
     )
     fieldsets = [
+        (None, {"fields": (("business_area", "program", "household_collection"),)}),
+        (None, {"fields": (("withdrawn", "is_removed"),)}),
         (None, {"fields": (("unicef_id", "head_of_household"),)}),
         (
             "Registration",
@@ -121,6 +127,9 @@ class HouseholdAdmin(
                     "org_enumerator",
                     "org_name_enumerator",
                     "name_enumerator",
+                    "kobo_asset_id",
+                    "row_id",
+                    "registration_id",
                 ),
             },
         ),
@@ -136,6 +145,27 @@ class HouseholdAdmin(
                 ),
             },
         ),
+        (
+            "Geo",
+            {
+                "classes": ("collapse",),
+                "fields": (
+                    "country",
+                    "admin_area",
+                    "admin1",
+                    "admin2",
+                    "admin3",
+                    "admin4",
+                    "geopoint",
+                    "village",
+                    "zip_code",
+                    "address",
+                ),
+            },
+        ),
+        ("Consent", {"classes": ("collapse",), "fields": ("consent_sign", "consent", "consent_sharing")}),
+        ("GPF", {"classes": ("collapse",), "fields": ("is_original", "copied_from", "is_migration_handled")}),
+        ("Deprecated", {"classes": ("collapse",), "fields": ("programs", "collect_individual_data")}),
         ("Others", {"classes": ("collapse",), "fields": ("__others__",)}),
     ]
     actions = [
@@ -151,12 +181,30 @@ class HouseholdAdmin(
 
     def get_queryset(self, request: HttpRequest) -> QuerySet:
         qs = self.model.all_objects.get_queryset().select_related(
-            "head_of_household", "country", "country_origin", "admin_area", "admin1", "admin2", "admin3", "admin4"
+            "business_area",
+            "head_of_household",
+            "country",
+            "country_origin",
+            "admin_area",
+            "admin1",
+            "admin2",
+            "admin3",
+            "admin4",
+            "household_collection",
+            "program",
         )
         ordering = self.get_ordering(request)
         if ordering:
             qs = qs.order_by(*ordering)
         return qs
+
+    def get_list_display(self, request: HttpRequest) -> "_DisplayT":
+        base = list(super().get_list_display(request))
+        if "program__exact" in request.GET:
+            base.remove("business_area")
+        elif "business_area__exact" in request.GET:
+            base[base.index("business_area")] = "program"
+        return base
 
     def get_ignored_linked_objects(self, request: HttpRequest) -> List:
         return []
@@ -326,18 +374,10 @@ class HouseholdAdmin(
 
 
 @admin.register(HouseholdCollection)
-class HouseholdCollectionAdmin(admin.ModelAdmin):
-    list_display = (
-        "unicef_id",
-        "business_area",
-        "number_of_representations",
-    )
+class HouseholdCollectionAdmin(AdminFiltersMixin, admin.ModelAdmin):
+    list_display = ("unicef_id",)
     search_fields = ("unicef_id",)
-    list_filter = [BusinessAreaForHouseholdCollectionListFilter]
+    list_filter = [
+        ("households__business_area", LinkedAutoCompleteFilter.factory(parent=None)),
+    ]
     inlines = [HouseholdRepresentationInline]
-
-    def number_of_representations(self, obj: HouseholdCollection) -> int:
-        return obj.households(manager="all_objects").count()
-
-    def business_area(self, obj: HouseholdCollection) -> Optional[BusinessArea]:
-        return obj.business_area

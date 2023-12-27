@@ -37,7 +37,7 @@ from admin_extra_buttons.mixins import ExtraButtonsMixin, confirm_action
 from admin_sync.mixin import GetManyFromRemoteMixin
 from adminfilters.autocomplete import AutoCompleteFilter
 from adminfilters.filters import ChoicesFieldComboFilter
-from adminfilters.mixin import AdminFiltersMixin
+from adminfilters.mixin import AdminAutoCompleteSearchMixin, AdminFiltersMixin
 from constance import config
 from jsoneditor.forms import JSONEditor
 from xlrd import XLRDError
@@ -184,7 +184,7 @@ AcceptanceProcessThresholdInlineFormSet = inlineformset_factory(
 class AcceptanceProcessThresholdInline(TabularInline):
     model = AcceptanceProcessThreshold
     extra = 0
-    formset = AcceptanceProcessThresholdInlineFormSet  # type: ignore
+    formset = AcceptanceProcessThresholdInlineFormSet  # type: ignore[assignment]
     ordering = [
         "payments_range_usd",
     ]
@@ -196,7 +196,9 @@ class AcceptanceProcessThresholdInline(TabularInline):
 
 
 @admin.register(BusinessArea)
-class BusinessAreaAdmin(GetManyFromRemoteMixin, LastSyncDateResetMixin, HOPEModelAdminBase):
+class BusinessAreaAdmin(
+    GetManyFromRemoteMixin, AdminAutoCompleteSearchMixin, LastSyncDateResetMixin, HOPEModelAdminBase
+):
     inlines = [
         AcceptanceProcessThresholdInline,
     ]
@@ -574,16 +576,16 @@ class XLSXKoboTemplateAdmin(SoftDeletableAdminMixin, HOPEModelAdminBase):
         label="Rerun KOBO Import",
         visible=lambda btn: btn.original is not None and btn.original.status != XLSXKoboTemplate.SUCCESSFUL,
     )
-    def rerun_kobo_import(self, request: HttpRequest, pk: "UUID") -> HttpResponsePermanentRedirect:
+    def rerun_kobo_import(self, request: HttpRequest, pk: "UUID") -> HttpResponseRedirect:
         xlsx_kobo_template_object = get_object_or_404(XLSXKoboTemplate, pk=pk)
         upload_new_kobo_template_and_update_flex_fields_task.run(
             xlsx_kobo_template_id=str(xlsx_kobo_template_object.id)
         )
-        return redirect(".")
+        return redirect(".", permanent=False)
 
     def add_view(
         self, request: HttpRequest, form_url: str = "", extra_context: Optional[Dict] = None
-    ) -> Union[HttpResponsePermanentRedirect, TemplateResponse]:
+    ) -> Union[HttpResponseRedirect, TemplateResponse]:
         if not self.has_add_permission(request):
             logger.error("The user did not have permission to do that")
             raise PermissionDenied
@@ -637,7 +639,7 @@ class XLSXKoboTemplateAdmin(SoftDeletableAdminMixin, HOPEModelAdminBase):
                 upload_new_kobo_template_and_update_flex_fields_task.run(
                     xlsx_kobo_template_id=str(xlsx_kobo_template_object.id)
                 )
-                return redirect("..")
+                return redirect("..", permanent=False)
         else:
             payload["form"] = form_class()
 
@@ -685,7 +687,7 @@ class StorageFileAdmin(ExtraButtonsMixin, admin.ModelAdmin):
         return request.user.can_download_storage_files()
 
     @button(label="Create eDopomoga TP")
-    def create_tp(self, request: HttpRequest, pk: "UUID") -> Union[TemplateResponse, HttpResponsePermanentRedirect]:
+    def create_tp(self, request: HttpRequest, pk: "UUID") -> Union[TemplateResponse, HttpResponseRedirect]:
         storage_obj = StorageFile.objects.get(pk=pk)
         context = self.get_common_context(
             request,
@@ -694,7 +696,7 @@ class StorageFileAdmin(ExtraButtonsMixin, admin.ModelAdmin):
         if request.method == "GET":
             if TargetPopulation.objects.filter(storage_file=storage_obj).exists():
                 self.message_user(request, "TargetPopulation for this storageFile have been created", messages.ERROR)
-                return redirect("..")
+                return redirect("..", permanent=False)
 
             form = ProgramForm(business_area_id=storage_obj.business_area_id)
             context["form"] = form
@@ -706,7 +708,7 @@ class StorageFileAdmin(ExtraButtonsMixin, admin.ModelAdmin):
             create_target_population_task.delay(storage_obj.pk, program_id, tp_name)
 
             self.message_user(request, "Creation of TargetPopulation started")
-            return redirect("..")
+            return redirect("..", permanent=False)
 
 
 @admin.register(MigrationStatus)
