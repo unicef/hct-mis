@@ -1,11 +1,9 @@
-import React, { useState } from 'react';
 import { BaseSection } from '@components/core/BaseSection';
-import { useTranslation } from 'react-i18next';
-import { useBaseUrl } from '@hooks/useBaseUrl';
 import { BlackLink } from '@components/core/BlackLink';
 import { UniversalMoment } from '@components/core/UniversalMoment';
+import { useBaseUrl } from '@hooks/useBaseUrl';
+import SearchIcon from '@mui/icons-material/Search';
 import {
-  TextField,
   InputAdornment,
   Table,
   TableBody,
@@ -13,8 +11,12 @@ import {
   TableContainer,
   TableHead,
   TableRow,
+  TableSortLabel,
+  TextField,
 } from '@mui/material';
-import SearchIcon from '@mui/icons-material/Search';
+import React, { useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import { ProgramSelect, useSortAndFilter } from './useSortAndFilter';
 
 interface ReleasedSectionProps {
   releasedData: any;
@@ -26,6 +28,22 @@ export const ReleasedSection: React.FC<ReleasedSectionProps> = ({
   const { t } = useTranslation();
   const { businessArea } = useBaseUrl();
   const [searchText, setSearchText] = useState('');
+  const {
+    sortField,
+    sortDirection,
+    selectedProgram,
+    setSelectedProgram,
+    handleSort,
+    sortRows,
+    filterRows,
+  } = useSortAndFilter({ initialSortField: null, initialSortDirection: 'asc' });
+
+  const programs = releasedData?.results?.reduce((acc, row) => {
+    if (!acc.includes(row.program)) {
+      acc.push(row.program);
+    }
+    return acc;
+  }, []);
 
   const columns = [
     {
@@ -55,15 +73,13 @@ export const ReleasedSection: React.FC<ReleasedSectionProps> = ({
     },
   ];
 
-  const filteredRows =
-    releasedData?.results?.filter((row: any) =>
-      columns.some((column) =>
-        row[column.field]
-          ?.toString()
-          .toLowerCase()
-          .includes(searchText.toLowerCase()),
-      ),
-    ) || [];
+  const filteredRows = filterRows(
+    releasedData?.results || [],
+    'last_approval_process_date',
+    searchText,
+    columns,
+  );
+  const sortedRows = sortRows(filteredRows);
 
   const title = t('Released Payment Plans');
 
@@ -91,12 +107,28 @@ export const ReleasedSection: React.FC<ReleasedSectionProps> = ({
             <TableHead>
               <TableRow>
                 {columns.map((column) => (
-                  <TableCell key={column.field}>{column.headerName}</TableCell>
+                  <TableCell key={column.field}>
+                    {column.field === 'program' ? (
+                      <ProgramSelect
+                        selectedProgram={selectedProgram}
+                        setSelectedProgram={setSelectedProgram}
+                        programs={programs}
+                      />
+                    ) : (
+                      <TableSortLabel
+                        active={sortField === column.field}
+                        direction={sortDirection}
+                        onClick={() => handleSort(column.field)}
+                      >
+                        {column.headerName}
+                      </TableSortLabel>
+                    )}
+                  </TableCell>
                 ))}
               </TableRow>
             </TableHead>
             <TableBody>
-              {filteredRows.map((row) => (
+              {sortedRows.map((row) => (
                 <TableRow key={row.id}>
                   {columns.map((column) => (
                     <TableCell key={column.field}>

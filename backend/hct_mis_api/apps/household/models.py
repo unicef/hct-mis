@@ -509,7 +509,6 @@ class Household(
         max_length=100,
         blank=True,
         null=True,
-        unique=True,
         db_index=True,
         verbose_name=_("Beneficiary Program Registration Id"),
     )
@@ -1104,6 +1103,16 @@ class Individual(
     def bank_account_number(self) -> str:
         bank_account_info = self.bank_account_info.first()
         return bank_account_info.bank_account_number if bank_account_info else None
+
+    @property
+    def account_holder_name(self) -> str:
+        bank_account_info = self.bank_account_info.first()
+        return bank_account_info.account_holder_name if bank_account_info else None
+
+    @property
+    def bank_branch_name(self) -> str:
+        bank_account_info = self.bank_account_info.first()
+        return bank_account_info.bank_branch_name if bank_account_info else None
 
     def withdraw(self) -> None:
         self.documents.update(status=Document.STATUS_INVALID)
