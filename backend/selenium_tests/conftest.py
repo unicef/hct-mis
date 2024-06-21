@@ -158,7 +158,7 @@ def driver() -> Chrome:
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--enable-logging")
     chrome_options.add_argument("--window-size=1920,1080")
-    return webdriver.Chrome(options=chrome_options)
+    yield webdriver.Chrome(options=chrome_options)
 
 
 @pytest.fixture(autouse=True)
@@ -183,7 +183,7 @@ def login(browser: Chrome) -> Chrome:
     browser.add_cookie({"name": "csrftoken", "value": pytest.CSRF})
     browser.add_cookie({"name": "sessionid", "value": pytest.SESSION_ID})
     browser.get(f"{browser.live_server.url}")
-    return browser
+    yield browser
 
 
 @pytest.fixture
@@ -317,6 +317,7 @@ def business_area() -> BusinessArea:
             "region_code": "64",
             "region_name": "SAR",
             "slug": "afghanistan",
+            "screen_beneficiary": True,
             "has_data_sharing_agreement": True,
             "is_payment_plan_applicable": True,
             "is_accountability_applicable": True,
@@ -326,7 +327,7 @@ def business_area() -> BusinessArea:
     FlagState.objects.get_or_create(
         **{"name": "ALLOW_ACCOUNTABILITY_MODULE", "condition": "boolean", "value": "True", "required": False}
     )
-    return business_area
+    yield business_area
 
 
 @pytest.fixture
@@ -396,7 +397,7 @@ def create_super_user(business_area: BusinessArea) -> User:
         business_area=business_area, partner=partner
     )
     ba_partner_through.roles.set([role])
-    return user
+    yield user
 
 
 # set up a hook to be able to check if a test has failed
