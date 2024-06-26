@@ -23,6 +23,7 @@ from page_object.managerial_console.managerial_console import ManagerialConsole
 from page_object.payment_module.new_payment_plan import NewPaymentPlan
 from page_object.payment_module.payment_module import PaymentModule
 from page_object.payment_module.payment_module_details import PaymentModuleDetails
+from page_object.program_log.payment_log import ProgramLog
 from page_object.programme_details.programme_details import ProgrammeDetails
 from page_object.programme_management.programme_management import ProgrammeManagement
 from page_object.programme_population.households import Households
@@ -304,6 +305,11 @@ def pagePaymentModuleDetails(request: FixtureRequest, browser: Chrome) -> Paymen
 @pytest.fixture
 def pageNewPaymentPlan(request: FixtureRequest, browser: Chrome) -> NewPaymentPlan:
     yield NewPaymentPlan(browser)
+
+
+@pytest.fixture
+def pageProgramLog(request: FixtureRequest, browser: Chrome) -> ProgramLog:
+    yield ProgramLog(browser)
 
 
 @pytest.fixture
