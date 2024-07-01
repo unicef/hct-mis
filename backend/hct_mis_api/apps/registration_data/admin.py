@@ -33,7 +33,6 @@ from hct_mis_api.apps.registration_datahub.celery_tasks import (
     merge_registration_data_import_task,
 )
 from hct_mis_api.apps.registration_datahub.documents import get_imported_individual_doc
-from hct_mis_api.apps.registration_datahub.models import RegistrationDataImportDatahub
 from hct_mis_api.apps.targeting.models import HouseholdSelection
 from hct_mis_api.apps.utils.admin import HOPEModelAdminBase
 from hct_mis_api.apps.utils.elasticsearch_utils import (
@@ -75,7 +74,7 @@ class RegistrationDataImportAdmin(AdminAutoCompleteSearchMixin, HOPEModelAdminBa
     def hub(self, button: button) -> Optional[str]:
         obj = button.context.get("original")
         if obj:
-            return reverse("admin:registration_datahub_registrationdataimportdatahub_change", args=[obj.datahub_id])
+            return reverse("admin:registration_data_registrationdataimportdatahub_change", args=[obj.datahub_id])
 
         button.visible = False
         return None
@@ -101,7 +100,7 @@ class RegistrationDataImportAdmin(AdminAutoCompleteSearchMixin, HOPEModelAdminBa
 
                 celery_task = registration_kobo_import_task
 
-            rdi_datahub_obj = get_object_or_404(RegistrationDataImportDatahub, id=obj.datahub_id)
+            rdi_datahub_obj = get_object_or_404(datahub_models.RegistrationDataImportDatahub, id=obj.datahub_id)
             business_area = BusinessArea.objects.get(slug=rdi_datahub_obj.business_area_slug)
 
             celery_task.delay(

@@ -2,7 +2,7 @@ import abc
 import base64
 import hashlib
 import logging
-from typing import TYPE_CHECKING, Any, Dict, Iterable, Optional, Type, Union
+from typing import TYPE_CHECKING, Any, Dict, Iterable, Optional, Union
 
 from django.core.exceptions import ValidationError
 from django.core.files.base import ContentFile
@@ -11,14 +11,13 @@ from django.db.transaction import atomic
 from django.forms import modelform_factory
 
 from hct_mis_api.apps.core.models import BusinessArea
-from hct_mis_api.apps.registration_data.models import RegistrationDataImport
-from hct_mis_api.apps.registration_datahub.celery_tasks import rdi_deduplication_task
-from hct_mis_api.apps.registration_datahub.models import (
+from hct_mis_api.apps.household.models import PendingHousehold, PendingIndividual
+from hct_mis_api.apps.registration_data.models import (
     ImportData,
-    ImportedHousehold,
-    ImportedIndividual,
+    RegistrationDataImport,
     RegistrationDataImportDatahub,
 )
+from hct_mis_api.apps.registration_datahub.celery_tasks import rdi_deduplication_task
 from hct_mis_api.aurora.celery_tasks import process_flex_records_task
 from hct_mis_api.aurora.models import Record, Registration
 from hct_mis_api.aurora.rdi import AuroraProcessor
@@ -36,7 +35,6 @@ class BaseRegistrationService(AuroraProcessor, abc.ABC):
         self.registration = registration
 
     @atomic("default")
-    @atomic("registration_datahub")
     def create_rdi(
         self, imported_by: Optional[Any], rdi_name: str = "rdi_name", is_open: bool = False
     ) -> RegistrationDataImport:
@@ -121,11 +119,11 @@ class BaseRegistrationService(AuroraProcessor, abc.ABC):
         records_with_error = []
 
         try:
-            with atomic("registration_datahub"):
+            with atomic():
                 for record_id in records_ids_to_import:
                     record = Record.objects.defer("data").get(id=record_id)
                     try:
-                        self.create_household_for_rdi_household(record, rdi_datahub)
+                        self.create_household_for_rdi_household(record, rdi)
                         imported_records_ids.append(record_id)
                     except ValidationError as e:
                         logger.exception(e)
@@ -133,11 +131,11 @@ class BaseRegistrationService(AuroraProcessor, abc.ABC):
 
                 # rollback if at least one Record is invalid
                 if records_with_error:
-                    transaction.set_rollback(True, using="registration_datahub")
+                    transaction.set_rollback(True)
 
             if not records_with_error:
-                number_of_individuals = ImportedIndividual.objects.filter(registration_data_import=rdi_datahub).count()
-                number_of_households = ImportedHousehold.objects.filter(registration_data_import=rdi_datahub).count()
+                number_of_individuals = PendingIndividual.objects.filter(registration_data_import=rdi).count()
+                number_of_households = PendingHousehold.objects.filter(registration_data_import=rdi).count()
 
                 import_data.number_of_individuals = number_of_individuals
                 rdi.number_of_individuals = number_of_individuals
@@ -196,9 +194,13 @@ class BaseRegistrationService(AuroraProcessor, abc.ABC):
             )
             raise
 
-    def _create_object_and_validate(self, data: Dict, model_class: Type) -> Any:
-        ModelClassForm = modelform_factory(model_class, fields=list(data.keys()))
-        form = ModelClassForm(data)
+    def _create_object_and_validate(self, data: Dict, model_class: Any, model_form: Optional[Any] = None) -> Any:
+        if model_form is None:
+            form = modelform_factory(model_class, fields=list(data.keys()))
+        else:
+            form = modelform_factory(model_class, form=model_form, fields=list(data.keys()))
+
+        form = form(data=data)
         if not form.is_valid():
             raise ValidationError(form.errors)
         return form.save()

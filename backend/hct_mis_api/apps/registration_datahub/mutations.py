@@ -23,7 +23,12 @@ from hct_mis_api.apps.core.utils import (
 from hct_mis_api.apps.core.validators import BaseValidator, raise_program_status_is
 from hct_mis_api.apps.household.models import Household, Individual
 from hct_mis_api.apps.program.models import Program
-from hct_mis_api.apps.registration_data.models import RegistrationDataImport
+from hct_mis_api.apps.registration_data.models import (
+    ImportData,
+    KoboImportData,
+    RegistrationDataImport,
+    RegistrationDataImportDatahub,
+)
 from hct_mis_api.apps.registration_data.schema import RegistrationDataImportNode
 from hct_mis_api.apps.registration_datahub.celery_tasks import (
     merge_registration_data_import_task,
@@ -39,13 +44,6 @@ from hct_mis_api.apps.registration_datahub.inputs import (
     RegistrationKoboImportMutationInput,
     RegistrationProgramPopulationImportMutationInput,
     RegistrationXlsxImportMutationInput,
-)
-from hct_mis_api.apps.registration_datahub.models import (
-    ImportData,
-    ImportedHousehold,
-    ImportedIndividual,
-    KoboImportData,
-    RegistrationDataImportDatahub,
 )
 from hct_mis_api.apps.registration_datahub.schema import (
     ImportDataNode,
@@ -476,7 +474,6 @@ class RefuseRegistrationDataImportMutation(BaseValidator, PermissionMutation):
 
     @classmethod
     @transaction.atomic(using="default")
-    @transaction.atomic(using="registration_datahub")
     @is_authenticated
     @raise_program_status_is(Program.FINISHED)
     def mutate(cls, root: Any, info: Any, id: Optional[str], **kwargs: Any) -> "RefuseRegistrationDataImportMutation":
@@ -489,17 +486,17 @@ class RefuseRegistrationDataImportMutation(BaseValidator, PermissionMutation):
         cls.has_permission(info, Permissions.RDI_REFUSE_IMPORT, obj_hct.business_area)
         cls.validate(status=obj_hct.status)
 
-        ImportedHousehold.objects.filter(registration_data_import=obj_hct.datahub_id).delete()
+        Household.all_objects.filter(registration_data_import=obj_hct).delete()
         refuse_reason = kwargs.get("refuse_reason")
         if refuse_reason:
             obj_hct.refuse_reason = refuse_reason
         obj_hct.status = RegistrationDataImport.REFUSED_IMPORT
         obj_hct.save()
 
-        imported_individuals_to_remove = ImportedIndividual.objects.filter(registration_data_import=obj_hct.datahub_id)
+        individuals_to_remove = Individual.all_objects.filter(registration_data_import=obj_hct)
 
         remove_elasticsearch_documents_by_matching_ids(
-            list(imported_individuals_to_remove.values_list("id", flat=True)),
+            list(individuals_to_remove.values_list("id", flat=True)),
             get_imported_individual_doc(obj_hct.business_area.slug),
         )
         log_create(
@@ -522,7 +519,6 @@ class EraseRegistrationDataImportMutation(PermissionMutation):
 
     @classmethod
     @transaction.atomic(using="default")
-    @transaction.atomic(using="registration_datahub")
     @is_authenticated
     @raise_program_status_is(Program.FINISHED)
     def mutate(cls, root: Any, info: Any, id: Optional[str], **kwargs: Any) -> "EraseRegistrationDataImportMutation":
@@ -543,7 +539,7 @@ class EraseRegistrationDataImportMutation(PermissionMutation):
             logger.error(msg)
             raise GraphQLError(msg)
 
-        ImportedHousehold.objects.filter(registration_data_import=obj_hct.datahub_id).delete()
+        Household.all_objects.filter(registration_data_import=obj_hct).delete()
 
         obj_hct.erased = True
         obj_hct.save()

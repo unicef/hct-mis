@@ -13,25 +13,28 @@ from hct_mis_api.apps.household.fixtures import (
     IndividualRoleInHouseholdFactory,
     create_household_and_individuals,
 )
-from hct_mis_api.apps.household.models import HEAD, MALE, ROLE_PRIMARY
+from hct_mis_api.apps.household.models import (
+    HEAD,
+    MALE,
+    ROLE_PRIMARY,
+    BankAccountInfo,
+    Document,
+    Household,
+    Individual,
+    IndividualIdentity,
+    IndividualRoleInHousehold,
+)
 from hct_mis_api.apps.program.fixtures import ProgramFactory
-from hct_mis_api.apps.registration_data.fixtures import RegistrationDataImportFactory
-from hct_mis_api.apps.registration_data.models import RegistrationDataImport
+from hct_mis_api.apps.registration_data.fixtures import (
+    RegistrationDataImportDatahubFactory,
+    RegistrationDataImportFactory,
+)
+from hct_mis_api.apps.registration_data.models import (
+    RegistrationDataImport,
+    RegistrationDataImportDatahub,
+)
 from hct_mis_api.apps.registration_datahub.celery_tasks import (
     registration_program_population_import_task,
-)
-from hct_mis_api.apps.registration_datahub.fixtures import (
-    ImportedDocumentTypeFactory,
-    RegistrationDataImportDatahubFactory,
-)
-from hct_mis_api.apps.registration_datahub.models import (
-    ImportedBankAccountInfo,
-    ImportedDocument,
-    ImportedHousehold,
-    ImportedIndividual,
-    ImportedIndividualIdentity,
-    ImportedIndividualRoleInHousehold,
-    RegistrationDataImportDatahub,
 )
 
 
@@ -94,7 +97,7 @@ class TestRegistrationProgramPopulationImportTask(BaseElasticSearchTestCase):
             role=ROLE_PRIMARY,
         )
         document_type = DocumentTypeFactory(key="birth_certificate")
-        ImportedDocumentTypeFactory(
+        DocumentTypeFactory(
             key=document_type.key,
         )
         cls.document = DocumentFactory(
@@ -123,53 +126,53 @@ class TestRegistrationProgramPopulationImportTask(BaseElasticSearchTestCase):
 
     def _imported_objects_count_before(self) -> None:
         self.assertEqual(
-            ImportedHousehold.objects.count(),
+            Household.pending_objects.filter().count(),
             0,
         )
         self.assertEqual(
-            ImportedIndividual.objects.count(),
+            Individual.pending_objects.count(),
             0,
         )
         self.assertEqual(
-            ImportedIndividualIdentity.objects.count(),
+            IndividualIdentity.pending_objects.count(),
             0,
         )
         self.assertEqual(
-            ImportedDocument.objects.count(),
+            Document.pending_objects.count(),
             0,
         )
         self.assertEqual(
-            ImportedBankAccountInfo.objects.count(),
+            BankAccountInfo.pending_objects.count(),
             0,
         )
         self.assertEqual(
-            ImportedIndividualRoleInHousehold.objects.count(),
+            IndividualRoleInHousehold.pending_objects.count(),
             0,
         )
 
     def _imported_objects_count_after(self, multiplier: int = 1) -> None:
         self.assertEqual(
-            ImportedHousehold.objects.count(),
+            Household.pending_objects.count(),
             1 * multiplier,
         )
         self.assertEqual(
-            ImportedIndividual.objects.count(),
+            Individual.pending_objects.count(),
             2 * multiplier,
         )
         self.assertEqual(
-            ImportedIndividualIdentity.objects.count(),
+            IndividualIdentity.pending_objects.count(),
             1 * multiplier,
         )
         self.assertEqual(
-            ImportedDocument.objects.count(),
+            Document.pending_objects.count(),
             1 * multiplier,
         )
         self.assertEqual(
-            ImportedBankAccountInfo.objects.count(),
+            BankAccountInfo.pending_objects.count(),
             1 * multiplier,
         )
         self.assertEqual(
-            ImportedIndividualRoleInHousehold.objects.count(),
+            IndividualRoleInHousehold.pending_objects.count(),
             1 * multiplier,
         )
 
@@ -233,7 +236,7 @@ class TestRegistrationProgramPopulationImportTask(BaseElasticSearchTestCase):
         self.registration_data_import_datahub.refresh_from_db()
         self.assertEqual(
             self.registration_data_import_datahub.import_done,
-            RegistrationDataImportDatahub.DONE,
+            RegistrationDataImportDatahub.NOT_STARTED,
         )
 
     def test_registration_program_population_import_ba_postpone_deduplication(self) -> None:

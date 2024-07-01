@@ -17,6 +17,7 @@ from hct_mis_api.apps.household.models import (
 )
 from hct_mis_api.apps.program.fixtures import ProgramFactory
 from hct_mis_api.apps.registration_data.fixtures import RegistrationDataImportFactory
+from hct_mis_api.apps.registration_data.models import ImportData
 from hct_mis_api.apps.registration_datahub.fixtures import (
     RegistrationDataImportDatahubFactory,
     create_imported_household_and_individuals,
@@ -24,7 +25,6 @@ from hct_mis_api.apps.registration_datahub.fixtures import (
 from hct_mis_api.apps.registration_datahub.models import (
     DUPLICATE_IN_BATCH,
     UNIQUE_IN_BATCH,
-    ImportData,
     ImportedIndividual,
 )
 from hct_mis_api.apps.registration_datahub.tasks.deduplicate import DeduplicateTask
@@ -242,7 +242,7 @@ class TestBatchDeduplication(BaseElasticSearchTestCase):
         task = DeduplicateTask(self.business_area.slug, self.program.id)
 
         with self.assertNumQueries(11):
-            task.deduplicate_imported_individuals(self.registration_data_import_datahub)
+            task.deduplicate_pending_individuals(self.registration_data_import_datahub)
         duplicate_in_batch = ImportedIndividual.objects.order_by("full_name").filter(
             deduplication_batch_status=DUPLICATE_IN_BATCH
         )
