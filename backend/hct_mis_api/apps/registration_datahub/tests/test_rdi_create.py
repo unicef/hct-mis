@@ -71,10 +71,6 @@ class CellMock:
 
 
 class TestRdiCreateTask(BaseElasticSearchTestCase):
-    databases = {
-        "default",
-        "registration_datahub",
-    }
     fixtures = (f"{settings.PROJECT_ROOT}/apps/geo/fixtures/data.json",)
 
     @classmethod
@@ -570,10 +566,6 @@ class TestRdiCreateTask(BaseElasticSearchTestCase):
 
 
 class TestRdiKoboCreateTask(BaseElasticSearchTestCase):
-    databases = {
-        "default",
-        "registration_datahub",
-    }
     fixtures = (f"{settings.PROJECT_ROOT}/apps/geo/fixtures/data.json",)
 
     @staticmethod

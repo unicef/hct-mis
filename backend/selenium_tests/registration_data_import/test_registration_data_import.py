@@ -13,7 +13,7 @@ from hct_mis_api.apps.account.fixtures import PartnerFactory
 from hct_mis_api.apps.account.models import Partner
 from hct_mis_api.apps.utils.elasticsearch_utils import rebuild_search_index
 
-pytestmark = pytest.mark.django_db(transaction=True, databases=["registration_datahub", "default"])
+pytestmark = pytest.mark.django_db(transaction=True)
 
 
 @pytest.fixture
