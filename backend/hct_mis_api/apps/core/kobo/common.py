@@ -112,10 +112,3 @@ def count_population(results: list, business_area: BusinessArea) -> tuple[int, i
                     total_individuals_count -= 1
 
     return total_households_count, total_individuals_count
-
-
-def filter_by_owner(data: List, business_area: BusinessArea) -> List:
-    kobo_username = business_area.kobo_username
-    if data:
-        return [element for element in data if element["owner__username"] == kobo_username]
-    return []
