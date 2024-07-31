@@ -11,7 +11,7 @@ from hct_mis_api.apps.registration_datahub.validators import UploadXLSXInstanceV
 
 
 class ValidateXlsxImport:
-    @transaction.atomic(using="default")
+    @transaction.atomic()
     def execute(self, import_data: ImportData, is_social_worker_program: bool = False) -> Dict:
         import_data.status = ImportData.STATUS_RUNNING
         import_data.save()

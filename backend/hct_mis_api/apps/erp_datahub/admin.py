@@ -127,7 +127,7 @@ class FundsCommitmentAdmin(HOPEModelAdminBase):
     form = FundsCommitmentAddForm
 
     @atomic(using="cash_assist_datahub_erp")
-    @atomic(using="default")
+    @atomic()
     @button(permission=should_show_assign_business_office)
     def assign_business_office(
         self, request: "HttpRequest", pk: "UUID"
@@ -223,7 +223,7 @@ class DownPaymentAdmin(HOPEModelAdminBase):
     date_hierarchy = "create_date"
 
     @atomic(using="cash_assist_datahub_erp")
-    @atomic(using="default")
+    @atomic()
     @button(permission=should_show_assign_business_office)
     def assign_business_office(
         self, request: "HttpRequest", pk: "UUID"
