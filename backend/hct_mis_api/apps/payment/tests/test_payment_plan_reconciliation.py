@@ -62,9 +62,10 @@ from hct_mis_api.apps.payment.models import (
 from hct_mis_api.apps.payment.xlsx.xlsx_payment_plan_per_fsp_import_service import (
     XlsxPaymentPlanImportPerFspService,
 )
-from hct_mis_api.apps.program.models import Program
+from hct_mis_api.apps.program.models import Program, ProgramCycle
 from hct_mis_api.apps.registration_data.fixtures import RegistrationDataImportFactory
 from hct_mis_api.apps.steficon.fixtures import RuleCommitFactory, RuleFactory
+from hct_mis_api.apps.targeting.models import TargetPopulation
 
 if TYPE_CHECKING:
     from hct_mis_api.apps.household.models import Household, Individual
@@ -74,6 +75,14 @@ mutation CreateProgram($programData: CreateProgramInput!) {
   createProgram(programData: $programData) {
     program {
       id
+      cycles {
+        edges {
+          node {
+            id
+            status
+          }
+        }
+      }
     }
   }
 }
@@ -244,6 +253,50 @@ importXlsxPaymentPlanPaymentList(
 }
 """
 
+CREATE_PROGRAM_CYCLE_MUTATION = """
+mutation createProgramCycle($programCycleData: CreateProgramCycleInput!){
+  createProgramCycle(programCycleData: $programCycleData){
+    program{
+      cycles{
+        totalCount
+        edges{
+          node{
+            id
+            unicefId
+            status
+            title
+            startDate
+            endDate
+          }
+        }
+      }
+    }
+  }
+}
+"""
+
+UPDATE_PROGRAM_CYCLE_MUTATION = """
+mutation updateProgramCycle($programCycleData: UpdateProgramCycleInput!){
+  updateProgramCycle(programCycleData: $programCycleData){
+    program{
+      cycles{
+        totalCount
+        edges{
+          node{
+            id
+            unicefId
+            status
+            title
+            startDate
+            endDate
+          }
+        }
+      }
+    }
+  }
+}
+"""
+
 
 class TestPaymentPlanReconciliation(APITestCase):
     @classmethod
@@ -273,7 +326,10 @@ class TestPaymentPlanReconciliation(APITestCase):
             Permissions.PM_IMPORT_XLSX_WITH_ENTITLEMENTS,
             Permissions.PM_APPLY_RULE_ENGINE_FORMULA_WITH_ENTITLEMENTS,
             Permissions.PROGRAMME_CREATE,
+            Permissions.PROGRAMME_UPDATE,
             Permissions.PROGRAMME_ACTIVATE,
+            Permissions.PM_PROGRAMME_CYCLE_CREATE,
+            Permissions.PM_PROGRAMME_CYCLE_UPDATE,
             Permissions.TARGETING_CREATE,
             Permissions.TARGETING_LOCK,
             Permissions.TARGETING_SEND,
@@ -340,6 +396,9 @@ class TestPaymentPlanReconciliation(APITestCase):
         )
 
         program = Program.objects.get(id=decode_id_string_required(program_id))
+        program_cycle_id = create_programme_response["data"]["createProgram"]["program"]["cycles"]["edges"][0]["node"][
+            "id"
+        ]
         self.update_partner_access_to_program(self.user.partner, program)
 
         create_target_population_response = self.graphql_request(
@@ -348,6 +407,7 @@ class TestPaymentPlanReconciliation(APITestCase):
             variables={
                 "input": {
                     "programId": program_id,
+                    "programCycleId": program_cycle_id,
                     "name": "TargP",
                     "excludedIds": "",
                     "exclusionReason": "",
@@ -394,6 +454,53 @@ class TestPaymentPlanReconciliation(APITestCase):
         status = finalize_tp_response["data"]["finalizeTargetPopulation"]["targetPopulation"]["status"]
         self.assertEqual(status, "READY_FOR_PAYMENT_MODULE")
 
+        # all cycles should have end_date before creation new one
+        ProgramCycle.objects.filter(program_id=decode_id_string(program_id)).update(
+            end_date=timezone.datetime(2022, 8, 25, tzinfo=utc).date()
+        )
+
+        create_program_cycle_response = self.graphql_request(
+            request_string=CREATE_PROGRAM_CYCLE_MUTATION,
+            context={"user": self.user, "headers": {"Program": program_id}},
+            variables={
+                "programCycleData": {
+                    "title": "Test Name Program Cycle 001",
+                    "startDate": timezone.datetime(2022, 8, 26, tzinfo=utc).date(),
+                }
+            },
+        )
+        cycles_data = create_program_cycle_response["data"]["createProgramCycle"]["program"]["cycles"]
+        assert cycles_data["totalCount"] == 2
+        assert cycles_data["edges"][1]["node"]["title"] == "Test Name Program Cycle 001"
+        assert cycles_data["edges"][1]["node"]["endDate"] is None
+
+        encoded_cycle_id = cycles_data["edges"][1]["node"]["id"]
+
+        update_program_cycle_response = self.graphql_request(
+            request_string=UPDATE_PROGRAM_CYCLE_MUTATION,
+            context={"user": self.user, "headers": {"Program": program_id}},
+            variables={
+                "programCycleData": {
+                    "programCycleId": encoded_cycle_id,
+                    "title": "NEW NEW NAME",
+                    "endDate": timezone.datetime(2022, 8, 29, tzinfo=utc).date(),
+                }
+            },
+        )
+
+        updated_cycles_data = update_program_cycle_response["data"]["updateProgramCycle"]["program"]["cycles"]
+        assert updated_cycles_data["totalCount"] == 2
+        assert updated_cycles_data["edges"][1]["node"]["title"] == "NEW NEW NAME"
+        assert updated_cycles_data["edges"][1]["node"]["endDate"] == "2022-08-29"
+
+        assert updated_cycles_data["edges"][0]["node"]["status"] == "DRAFT"
+        assert updated_cycles_data["edges"][1]["node"]["status"] == "DRAFT"
+
+        # add other cycle to TP
+        TargetPopulation.objects.filter(name="TargP").update(
+            program_cycle_id=ProgramCycle.objects.get(title="NEW NEW NAME").id
+        )
+
         with patch(
             "hct_mis_api.apps.payment.services.payment_plan_services.transaction"
         ) as mock_prepare_payment_plan_task:
@@ -404,8 +511,6 @@ class TestPaymentPlanReconciliation(APITestCase):
                     "input": {
                         "businessAreaSlug": self.business_area.slug,
                         "targetingId": target_population_id,
-                        "startDate": timezone.datetime(2022, 8, 25, tzinfo=utc),
-                        "endDate": timezone.datetime(2022, 8, 30, tzinfo=utc),
                         "dispersionStartDate": (timezone.now() - timedelta(days=1)).strftime("%Y-%m-%d"),
                         "dispersionEndDate": (timezone.now() + timedelta(days=1)).strftime("%Y-%m-%d"),
                         "currency": "USD",
@@ -418,6 +523,9 @@ class TestPaymentPlanReconciliation(APITestCase):
         assert "errors" not in create_payment_plan_response, create_payment_plan_response
         encoded_payment_plan_id = create_payment_plan_response["data"]["createPaymentPlan"]["paymentPlan"]["id"]
         payment_plan_id = decode_id_string(encoded_payment_plan_id)
+
+        # check if Cycle is active
+        assert ProgramCycle.objects.filter(title="NEW NEW NAME").first().status == "ACTIVE"
 
         dm_cash = DeliveryMechanism.objects.get(code="cash")
         dm_transfer = DeliveryMechanism.objects.get(code="transfer_to_account")
