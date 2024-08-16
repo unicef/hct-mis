@@ -228,7 +228,6 @@ class TestRegistrationDataImport:
         pageRegistrationDataImport.getButtonImportFile().click()
         pageRegistrationDataImport.checkAlert("Cannot import empty form")
 
-    @pytest.mark.skip(reason="Kobo form is not available. This is a external service, we cannot control it.")
     @pytest.mark.vcr(ignore_localhost=True, ignore_hosts=["elasticsearch"])
     def test_import_kobo_form(
         self,
@@ -254,7 +253,7 @@ class TestRegistrationDataImport:
         pageRegistrationDataImport.getKoboProjectSelect().click()
         pageRegistrationDataImport.select_listbox_element("UNICEF NGA Education")
 
-        assert pageRegistrationDataImport.buttonImportFileIsEnabled(timeout=300)
+        assert pageRegistrationDataImport.buttonImportFileIsEnabled(timeout=60)
         assert "1" in pageRegistrationDataImport.getNumberOfHouseholds().text
         assert "2" in pageRegistrationDataImport.getNumberOfIndividuals().text
 
