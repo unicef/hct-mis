@@ -1,257 +1,250 @@
-import { Box, Grid } from '@mui/material';
-import * as React from 'react';
-import { useEffect } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
+import { Typography, Box, Grid, Paper } from '@mui/material';
+import * as dc from 'dc';
+import * as d3 from 'd3';
+import crossfilter from 'crossfilter2';
 import { useTranslation } from 'react-i18next';
-import styled from 'styled-components';
-import {
-  AllChartsQueryVariables,
-  useAllChartsQuery,
-  useGlobalAreaChartsLazyQuery,
-} from '@generated/graphql';
-import { LoadingComponent } from '@components/core/LoadingComponent';
-import { DashboardPaper } from '@components/dashboard/DashboardPaper';
-import { PaymentsChart } from '@components/dashboard/charts/PaymentsChart';
-import { ProgrammesBySector } from '@components/dashboard/charts/ProgrammesBySector';
-import { TotalTransferredByMonth } from '@components/dashboard/charts/TotalTransferredByMonth';
-import { VolumeByDeliveryMechanism } from '@components/dashboard/charts/VolumeByDeliveryMechanism';
-import { GrievancesSection } from '@components/dashboard/sections/GrievancesSection/GrievancesSection';
-import { PaymentVerificationSection } from '@components/dashboard/sections/PaymentVerificationSection/PaymentVerificationSection';
-import { TotalAmountTransferredSectionByAdminAreaSection } from '@components/dashboard/sections/TotalAmountTransferredByAdminAreaSection/TotalAmountTransferredByAdminAreaSection';
-import { TotalAmountTransferredByCountrySection } from '@components/dashboard/sections/TotalAmountTransferredByCountrySection';
-import { TotalAmountTransferredSection } from '@components/dashboard/sections/TotalAmountTransferredSection/TotalAmountTransferredSection';
-import { TotalNumberOfChildrenReachedSection } from '@components/dashboard/sections/TotalNumberOfChildrenReachedSection/TotalNumberOfChildrenReachedSection';
-import { TotalNumberOfHouseholdsReachedSection } from '@components/dashboard/sections/TotalNumberOfHouseholdsReachedSection/TotalNumberOfHouseholdsReachedSection';
-import { TotalNumberOfIndividualsReachedSection } from '@components/dashboard/sections/TotalNumberOfIndividualsReachedSection/TotalNumberOfIndividualsReachedSection';
-import { useBaseUrl } from '@hooks/useBaseUrl';
-import { useProgramContext } from '../../../programContext';
-import { TotalNumberOfPeopleReachedSection } from '@components/dashboard/sections/TotalNumberOfPeopleReachedSection';
-import { TotalAmountTransferredSectionByAdminAreaForPeopleSection } from '@components/dashboard/sections/TotalAmountTransferredByAdminAreaForPeopleSection';
-import { PaymentVerificationSectionForPeople } from '@components/dashboard/sections/PaymentVerificationSectionForPeople';
+import { Household, HouseholdPayment } from '@api/dashboardApi';
 
-const PaddingContainer = styled.div`
-  padding: 20px;
-`;
-
-interface ChartWrapperProps {
-  numberOfProgrammes: number;
-}
-
-const ChartWrapper = styled.div<ChartWrapperProps>`
-  height: ${(props) => (props.numberOfProgrammes <= 3 ? '200px' : '400px')};
-`;
-
-interface PaddingLeftContainerProps {
-  paddingLeft?: string;
-}
-
-const PaddingLeftContainer = styled.div<PaddingLeftContainerProps>`
-  padding-left: ${(props) => props.paddingLeft || '20px'};
-`;
-
-interface CardTextLightProps {
-  large?: boolean;
-}
-
-const CardTextLight = styled.div<CardTextLightProps>`
-  text-transform: capitalize;
-  color: #a4a4a4;
-  font-weight: 500;
-  font-size: ${(props) => (props.large ? '16px' : '12px')};
-`;
-
-interface DashboardYearPageProps {
-  year: string;
-  filter;
-}
-
-export const DashboardYearPage = ({
-  year,
-  filter,
-}: DashboardYearPageProps): React.ReactElement => {
+export function DashboardYearPage({ year, data }: { year: string; data: Household[] }) {
+  dc.config.defaultColors([...d3.schemeTableau10]);
+  const numberFormatter = d3.format(',.2f');
   const { t } = useTranslation();
-  const { businessArea, isGlobal, isAllPrograms, programId } = useBaseUrl();
-  const { isSocialDctType } = useProgramContext();
-
-  const variables: AllChartsQueryVariables = {
-    year: parseInt(year, 10),
-    businessAreaSlug: businessArea,
-  };
-
-  if (!isGlobal) {
-    variables.program = filter.program;
-    variables.administrativeArea = filter.administrativeArea;
-  }
-
-  if (!isAllPrograms) {
-    variables.program = programId;
-  }
-
-  const { data, loading } = useAllChartsQuery({
-    variables,
-    fetchPolicy: 'cache-and-network',
+  console.log(year);
+  const [totals, setTotals] = useState({
+    totalAmountPaid: 0,
+    numberOfPayments: 0,
+    outstandingPayments: 0,
+    householdsReached: 0,
+    pwdReached: 0,
+    childrenReached: 0,
+    individualsReached: 0,
   });
 
-  const [loadGlobal, { data: globalData, loading: globalLoading }] =
-    useGlobalAreaChartsLazyQuery({
-      variables: {
-        year: parseInt(year, 10),
-      },
-    });
+  const ndx = useMemo(() => {
+    if (!data || data.length === 0) return null;
+
+    const processedPayments: HouseholdPayment[] = data
+      .flatMap((household: Household) =>
+        household.payments.map((payment) => ({
+          business_area: household.business_area,
+          delivered_quantity: payment.delivered_quantity ? parseFloat(String(payment.delivered_quantity)) : 0,
+          delivered_quantity_usd: payment.delivered_quantity_usd ? parseFloat(String(payment.delivered_quantity_usd)) : 0,
+          payment_status: payment.status,
+          program: household.program,
+          admin1: household.admin1,
+          admin2: household.admin2,
+          sector: household.sector,
+          status: payment.status,
+          currency: payment.currency,
+          fsp: payment.fsp,
+          delivery_type: payment.delivery_type,
+          size: household.size,
+          children_count: household.children_count ? household.children_count : 0,
+          id: household.id,
+          delivery_date: new Date(payment.delivery_date),
+        })),
+      );
+
+    return crossfilter(processedPayments);
+  }, [data]);
 
   useEffect(() => {
-    if (isGlobal) {
-      void loadGlobal();
-    }
-  }, [isGlobal, loadGlobal]);
+    if (!ndx) return;
 
-  if (isGlobal) {
-    if (loading || globalLoading) return <LoadingComponent />;
-    if (!data || !globalData) return null;
-  } else {
-    if (loading) return <LoadingComponent />;
-    if (!data) return null;
-  }
+    // Define Dimensions and Groups
+    const fspDim = ndx.dimension((d) => d.fsp);
+    const fspGroup = fspDim.group().reduceSum((d) => d.delivered_quantity_usd);
+
+    const deliveryDim = ndx.dimension((d) => d.delivery_type);
+    const deliveryGroup = deliveryDim.group().reduceSum((d) => d.delivered_quantity_usd);
+
+    const sectorDim = ndx.dimension((d) => d.sector);
+    const sectorGroup = sectorDim.group().reduceSum((d) => d.delivered_quantity);
+
+    const volumeDim = ndx.dimension((d) => d.program);
+    const volumeGroup = volumeDim.group().reduceSum((d) => d.delivered_quantity);
+
+    // Update Totals
+    const updateTotals = () => {
+      const totalAmountPaid = ndx.groupAll().reduceSum((d: any) => {
+        if (['Transaction Successful', 'Distribution Successful', 'Partially Distributed'].includes(d.payment_status)) {
+          return d.delivered_quantity_usd;
+        }
+        return 0;
+      }).value() as number;
+      const numberOfPayments = ndx.groupAll().reduceCount().value() as number;
+      const outstandingPayments = ndx.groupAll().reduceSum((d: any) => {
+        if (d.payment_status === 'Pending') {
+          return d.delivered_quantity_usd;
+        }
+        return 0;
+      }).value() as number;
+      const householdsReached = ndx.dimension((d) => d.id).group().all().length;
+      const individualsReached = ndx.groupAll().reduceSum((d) => d.size).value() as  number;
+      const pwdReached = householdsReached;
+      const childrenReached = ndx.groupAll().reduceSum((d) => d.children_count).value() as number;
+
+      setTotals({
+        totalAmountPaid,
+        numberOfPayments,
+        outstandingPayments,
+        householdsReached,
+        individualsReached,
+        pwdReached,
+        childrenReached,
+      });
+    };
+
+    updateTotals(); // Call initially to set totals
+
+    // Initialize charts
+    const fspChart = dc.pieChart('#fsp-chart');
+    fspChart
+      .dimension(fspDim)
+      .group(fspGroup)
+      .radius(100)
+      .innerRadius(30)
+      .renderLabel(true)
+      .useViewBoxResizing(true)
+      .label(d => `${d.key}: ${numberFormatter((d.value / totals.totalAmountPaid) * 100)}%`)
+      .title(d => `${d.key}: ${numberFormatter(d.value)} USD`);
+
+    const deliveryChart = dc.pieChart('#delivery-chart');
+    deliveryChart
+      .dimension(deliveryDim)
+      .group(deliveryGroup)
+      .radius(100)
+      .innerRadius(30)
+      .renderLabel(true)
+      .useViewBoxResizing(true)
+      .label(d => `${d.key}: ${numberFormatter((d.value / totals.totalAmountPaid) * 100)}%`)
+      .title(d => `${d.key}: ${numberFormatter(d.value)} USD`);
+
+    const sectorChart = dc.rowChart('#sector-chart');
+    sectorChart
+      .dimension(sectorDim)
+      .group(sectorGroup)
+      .elasticX(true)
+      .height(300)
+      .label(d => `${d.key}: ${numberFormatter(d.value)} USD`)
+      .title(d => `${d.key}: ${numberFormatter(d.value)} USD`)
+      .xAxis().ticks(4);
+
+    const volumeChart = dc.rowChart('volume-chart');
+    volumeChart
+      .dimension(volumeDim)
+      .group(volumeGroup)
+      .elasticX(true)
+      .height(300)
+      .label(d => `${d.key}: ${numberFormatter(d.value)} USD`)
+      .title(d => `${d.key}: ${numberFormatter(d.value)} USD`)
+      .xAxis().ticks(4);
+
+    // Register global listener for filtering
+    dc.chartRegistry.list().forEach((chart) => {
+      chart.on('filtered', () => {
+        updateTotals();
+        dc.redrawAll();
+      });
+    });
+
+    dc.renderAll();
+  },  [data, numberFormatter, totals.totalAmountPaid, ndx]);
 
   return (
-    <PaddingContainer>
+    <Box p={4}>
       <Grid container spacing={3}>
-        <Grid item xs={8}>
-          <Box mb={6}>
-            <TotalAmountTransferredSection
-              data={data.sectionTotalTransferred}
-            />
-          </Box>
-          {isGlobal && (
-            <Box mb={6}>
-              <TotalAmountTransferredByCountrySection
-                data={globalData?.chartTotalTransferredCashByCountry}
-              />
-            </Box>
-          )}
-          {isAllPrograms && (
-            <Box mb={6}>
-              <DashboardPaper title={t('Number of Programmes by Sector')}>
-                <ChartWrapper
-                  numberOfProgrammes={
-                    data.chartProgrammesBySector?.labels.length || 0
-                  }
-                >
-                  <ProgrammesBySector data={data.chartProgrammesBySector} />
-                </ChartWrapper>
-              </DashboardPaper>
-            </Box>
-          )}
-          <Box mb={6}>
-            <DashboardPaper title={t('Total Transferred by Month')}>
-              <TotalTransferredByMonth
-                data={data.chartTotalTransferredByMonth}
-              />
-            </DashboardPaper>
-          </Box>
-          {!isGlobal && (
-            <>
-              {(isAllPrograms || !isSocialDctType) && (
-                <Box mb={6}>
-                  <TotalAmountTransferredSectionByAdminAreaSection
-                    year={year}
-                    filter={filter}
-                  />
-                </Box>
-              )}
-              {(isAllPrograms || isSocialDctType) && (
-                <Box mb={6}>
-                  <TotalAmountTransferredSectionByAdminAreaForPeopleSection
-                    year={year}
-                    filter={filter}
-                  />
-                </Box>
-              )}
-            </>
-          )}
-          {(isAllPrograms || !isSocialDctType) && (
-            <Box mb={6}>
-              <PaymentVerificationSection
-                data={data.chartPaymentVerification}
-              />
-            </Box>
-          )}
-          {(isAllPrograms || isSocialDctType) && (
-            <Box mb={6}>
-              <PaymentVerificationSectionForPeople
-                data={data.chartPaymentVerificationForPeople}
-              />
-            </Box>
-          )}
-        </Grid>
-        <Grid item xs={4}>
-          <PaddingLeftContainer>
-            <Grid container spacing={6}>
-              {(isAllPrograms || !isSocialDctType) && (
-                <>
-                  <Grid item xs={12}>
-                    <TotalNumberOfHouseholdsReachedSection
-                      data={data.sectionHouseholdsReached}
-                    />
-                  </Grid>
-                  <Grid item xs={12}>
-                    <TotalNumberOfIndividualsReachedSection
-                      data={data.sectionIndividualsReached}
-                      chartDataIndividuals={
-                        data.chartIndividualsReachedByAgeAndGender
-                      }
-                      chartDataIndividualsDisability={
-                        data.chartIndividualsWithDisabilityReachedByAge
-                      }
-                    />
-                  </Grid>
-                </>
-              )}
-              {(isAllPrograms || isSocialDctType) && (
-                <Grid item xs={12}>
-                  <TotalNumberOfPeopleReachedSection
-                    data={data.sectionPeopleReached}
-                    chartDataPeople={data.chartPeopleReachedByAgeAndGender}
-                    chartDataPeopleDisability={
-                      data.chartPeopleWithDisabilityReachedByAge
-                    }
-                  />
-                </Grid>
-              )}
-              {data.sectionChildReached && (
-                <Grid item xs={12}>
-                  <TotalNumberOfChildrenReachedSection
-                    data={data.sectionChildReached}
-                  />
-                </Grid>
-              )}
-              <Grid item xs={12}>
-                <Box mb={6}>
-                  <DashboardPaper
-                    title={t('Volume by Delivery Mechanism in USD')}
-                    noMarginTop
-                    extraPaddingTitle={false}
-                  >
-                    <CardTextLight large>
-                      {t('Delivery Type')}
-                    </CardTextLight>
-                    <VolumeByDeliveryMechanism
-                      data={data.chartVolumeByDeliveryMechanism}
-                    />
-                  </DashboardPaper>
-                </Box>
-                <Box mb={6}>
-                  <GrievancesSection data={data.chartGrievances} />
-                </Box>
-                <Box mb={6}>
-                  <DashboardPaper title="Payments">
-                    <PaymentsChart data={data.chartPayment} />
-                  </DashboardPaper>
-                </Box>
+        {/* Year in a Glance Section */}
+        <Grid item xs={12}>
+          <Paper elevation={3} sx={{ padding: 2 }}>
+            <Grid container spacing={2}>
+              <Grid item xs={4}>
+                <Typography>{t('Total Amount Paid')}</Typography>
+                <Typography variant="h5">{numberFormatter(totals.totalAmountPaid)} USD</Typography>
+              </Grid>
+              <Grid item xs={4}>
+                <Typography>{t('Total No. of Payments')}</Typography>
+                <Typography variant="h5">{totals.numberOfPayments}</Typography>
+              </Grid>
+              <Grid item xs={4}>
+                <Typography>{t('Outstanding Payments Amounts')}</Typography>
+                <Typography variant="h5">{numberFormatter(totals.outstandingPayments)} USD</Typography>
               </Grid>
             </Grid>
-          </PaddingLeftContainer>
+          </Paper>
+        </Grid>
+
+        <Grid item xs={12}>
+          <Paper elevation={3} sx={{ padding: 2 }}>
+            <Typography variant="h6">{t('Payment Reach')}</Typography>
+            <Grid container spacing={2}>
+              <Grid item xs={4}>
+                <Typography>{t('Total No. of Households Reached')}</Typography>
+                <Typography variant="h5">{totals.householdsReached}</Typography>
+              </Grid>
+              <Grid item xs={4}>
+                <Typography>{t('Total No. of PWD Reached')}</Typography>
+                <Typography variant="h5">{totals.pwdReached}</Typography>
+              </Grid>
+              <Grid item xs={4}>
+                <Typography>{t('Total No. of Children Reached')}</Typography>
+                <Typography variant="h5">{totals.childrenReached}</Typography>
+              </Grid>
+            </Grid>
+          </Paper>
+        </Grid>
+
+        <Grid item xs={12} md={6}>
+          <Paper elevation={3} sx={{ padding: 2 }}>
+            <Typography variant="h6">{t('Payments by FSP')}</Typography>
+            <Box id="fsp-chart" />
+          </Paper>
+        </Grid>
+        <Grid item xs={12} md={6}>
+          <Paper elevation={3} sx={{ padding: 2 }}>
+            <Typography variant="h6">{t('Payments by Delivery Mechanism')}</Typography>
+            <Box id="delivery-chart" />
+          </Paper>
+        </Grid>
+        <Grid item xs={12} md={6}>
+          <Paper elevation={3} sx={{ padding: 2 }}>
+            <Typography variant="h6">{('Payments by Sector')}</Typography>
+            <Box id="sector-chart" />
+          </Paper>
+        </Grid>
+        <Grid item xs={12} md={6}>
+          <Paper elevation={3} sx={{ padding: 2 }}>
+            <Typography variant="h6">{t('Volume by Programme Structure')}</Typography>
+            <Box id="volume-chart"/>
+          </Paper>
+        </Grid>
+
+        {/* Reconciliation and Verification Section */}
+        <Grid item xs={12}>
+          <Paper elevation={3} sx={{ padding: 2 }}>
+            <Typography variant="h6">{t('Reconciliation and Verification')}</Typography>
+            <Grid container spacing={2}>
+              <Grid item xs={3}>
+                <Typography>{t('Payments Reconciled')}</Typography>
+                <Typography variant="h5"></Typography>
+              </Grid>
+              <Grid item xs={3}>
+                <Typography>{t('Pending Reconciliation')}</Typography>
+                <Typography variant="h5"></Typography>
+              </Grid>
+              <Grid item xs={3}>
+                <Typography>{t('Payments Verified')}</Typography>
+                <Typography variant="h5"></Typography>
+              </Grid>
+              <Grid item xs={3}>
+                <Typography>{t('Sites Verified')}</Typography>
+                <Typography variant="h5"></Typography>
+              </Grid>
+            </Grid>
+          </Paper>
         </Grid>
       </Grid>
-    </PaddingContainer>
+    </Box>
   );
-};
+}
