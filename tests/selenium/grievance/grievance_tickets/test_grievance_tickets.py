@@ -8,7 +8,6 @@ from django.core.management import call_command
 
 import pytest
 from dateutil.relativedelta import relativedelta
-from pytest_django import DjangoDbBlocker
 from selenium.webdriver.common.by import By
 from selenium.webdriver.remote.webelement import WebElement
 
@@ -54,25 +53,22 @@ def id_to_base64(object_id: str, name: str) -> str:
 
 
 @pytest.fixture
-def add_grievance(django_db_setup: Generator[None, None, None], django_db_blocker: DjangoDbBlocker) -> None:
-    with django_db_blocker.unblock():
-        call_command("loaddata", f"{settings.PROJECT_ROOT}/apps/grievance/fixtures/data-cypress.json")
+def add_grievance() -> None:
+    call_command("loaddata", f"{settings.PROJECT_ROOT}/apps/grievance/fixtures/data-cypress.json")
     yield
 
 
 @pytest.fixture
-def add_households(django_db_setup: Generator[None, None, None], django_db_blocker: DjangoDbBlocker) -> None:
-    with django_db_blocker.unblock():
-        call_command("loaddata", f"{settings.PROJECT_ROOT}/apps/registration_data/fixtures/data-cypress.json")
-        call_command("loaddata", f"{settings.PROJECT_ROOT}/apps/household/fixtures/data-cypress.json")
+def add_households() -> None:
+    call_command("loaddata", f"{settings.PROJECT_ROOT}/apps/registration_data/fixtures/data-cypress.json")
+    call_command("loaddata", f"{settings.PROJECT_ROOT}/apps/household/fixtures/data-cypress.json")
     yield
 
 
 @pytest.fixture
-def create_programs(django_db_setup: Generator[None, None, None], django_db_blocker: DjangoDbBlocker) -> None:
-    with django_db_blocker.unblock():
-        call_command("loaddata", f"{settings.PROJECT_ROOT}/apps/core/fixtures/data-selenium.json")
-        call_command("loaddata", f"{settings.PROJECT_ROOT}/apps/program/fixtures/data-cypress.json")
+def create_programs() -> None:
+    call_command("loaddata", f"{settings.PROJECT_ROOT}/apps/core/fixtures/data-selenium.json")
+    call_command("loaddata", f"{settings.PROJECT_ROOT}/apps/program/fixtures/data-cypress.json")
     yield
 
 
@@ -227,13 +223,13 @@ def generate_grievance(
             "role": "HEAD",
             "household": id_to_base64(hh.id, "HouseholdNode"),
             "individual": id_to_base64(individual_qs[0].id, "IndividualNode"),
-            "new_individual": id_to_base64(individual_qs[1].id, "IndividualNode"),
+            "new_individual": id_to_base64(individual_qs[2].id, "IndividualNode"),
         },
         str(role.id): {
             "role": "PRIMARY",
             "household": id_to_base64(hh.id, "HouseholdNode"),
             "individual": id_to_base64(individual_qs[0].id, "IndividualNode"),
-            "new_individual": id_to_base64(individual_qs[1].id, "IndividualNode"),
+            "new_individual": id_to_base64(individual_qs[2].id, "IndividualNode"),
         },
     }
 
@@ -419,7 +415,7 @@ class TestSmokeGrievanceTickets:
         assert "-" in pageGrievanceDetailsPage.getLabelPaymentPlan().text
         assert "-" in pageGrievanceDetailsPage.getLabelPaymentPlanVerification().text
         assert "Test Program" in pageGrievanceDetailsPage.getLabelProgramme().text
-        assert "Andarab" in pageGrievanceDetailsPage.getAdministrativeLevel().text
+        assert "Shakardara" in pageGrievanceDetailsPage.getAdministrativeLevel().text
         assert "-" in pageGrievanceDetailsPage.getAreaVillage().text
         assert "English | English" in pageGrievanceDetailsPage.getLanguagesSpoken().text
         assert "-" in pageGrievanceDetailsPage.getDocumentation().text
@@ -429,7 +425,6 @@ class TestSmokeGrievanceTickets:
         assert "ADD NEW NOTE" in pageGrievanceDetailsPage.getButtonNewNote().text
 
 
-@pytest.mark.usefixtures("login")
 class TestGrievanceTicketsHappyPath:
     def test_grievance_tickets_create_new_ticket_referral(
         self,
@@ -1117,23 +1112,33 @@ class TestGrievanceTickets:
         pageGrievanceDetailsPage.getPersonIcon()
         assert "person-icon" in [
             ii.get_attribute("data-cy")
-            for ii in pageGrievanceDetailsPage.getPossibleDuplicateGoldenRow().find_elements(By.TAG_NAME, "svg")
+            for ii in pageGrievanceDetailsPage.getPossibleDuplicateRowByUnicefId("IND-00-0000.0011").find_elements(
+                By.TAG_NAME, "svg"
+            )
         ]
         assert "people-icon" not in [
             ii.get_attribute("data-cy")
-            for ii in pageGrievanceDetailsPage.getPossibleDuplicateRow()[0].find_elements(By.TAG_NAME, "svg")
+            for ii in pageGrievanceDetailsPage.getPossibleDuplicateRowByUnicefId("IND-00-0000.0022").find_elements(
+                By.TAG_NAME, "svg"
+            )
         ]
         assert "person-icon" not in [
             ii.get_attribute("data-cy")
-            for ii in pageGrievanceDetailsPage.getPossibleDuplicateRow()[0].find_elements(By.TAG_NAME, "svg")
+            for ii in pageGrievanceDetailsPage.getPossibleDuplicateRowByUnicefId("IND-00-0000.0022").find_elements(
+                By.TAG_NAME, "svg"
+            )
         ]
         assert "people-icon" not in [
             ii.get_attribute("data-cy")
-            for ii in pageGrievanceDetailsPage.getPossibleDuplicateRow()[1].find_elements(By.TAG_NAME, "svg")
+            for ii in pageGrievanceDetailsPage.getPossibleDuplicateRowByUnicefId("IND-00-0000.0033").find_elements(
+                By.TAG_NAME, "svg"
+            )
         ]
         assert "person-icon" not in [
             ii.get_attribute("data-cy")
-            for ii in pageGrievanceDetailsPage.getPossibleDuplicateRow()[1].find_elements(By.TAG_NAME, "svg")
+            for ii in pageGrievanceDetailsPage.getPossibleDuplicateRowByUnicefId("IND-00-0000.0033").find_elements(
+                By.TAG_NAME, "svg"
+            )
         ]
         pageGrievanceDetailsPage.getButtonClear().click()
         pageGrievanceDetailsPage.getButtonConfirm().click()
@@ -1142,59 +1147,86 @@ class TestGrievanceTickets:
         try:
             assert "person-icon" not in [
                 ii.get_attribute("data-cy")
-                for ii in pageGrievanceDetailsPage.getPossibleDuplicateGoldenRow().find_elements(By.TAG_NAME, "svg")
+                for ii in pageGrievanceDetailsPage.getPossibleDuplicateRowByUnicefId("IND-00-0000.0011").find_elements(
+                    By.TAG_NAME, "svg"
+                )
             ]
         except BaseException:
             sleep(4)
             assert "person-icon" not in [
                 ii.get_attribute("data-cy")
-                for ii in pageGrievanceDetailsPage.getPossibleDuplicateGoldenRow().find_elements(By.TAG_NAME, "svg")
+                for ii in pageGrievanceDetailsPage.getPossibleDuplicateRowByUnicefId("IND-00-0000.0011").find_elements(
+                    By.TAG_NAME, "svg"
+                )
             ]
         assert "person-icon" not in [
             ii.get_attribute("data-cy")
-            for ii in pageGrievanceDetailsPage.getPossibleDuplicateGoldenRow().find_elements(By.TAG_NAME, "svg")
+            for ii in pageGrievanceDetailsPage.getPossibleDuplicateRowByUnicefId("IND-00-0000.0011").find_elements(
+                By.TAG_NAME, "svg"
+            )
         ]
         assert "people-icon" not in [
             ii.get_attribute("data-cy")
-            for ii in pageGrievanceDetailsPage.getPossibleDuplicateRow()[0].find_elements(By.TAG_NAME, "svg")
+            for ii in pageGrievanceDetailsPage.getPossibleDuplicateRowByUnicefId("IND-00-0000.0022").find_elements(
+                By.TAG_NAME, "svg"
+            )
         ]
         assert "person-icon" not in [
             ii.get_attribute("data-cy")
-            for ii in pageGrievanceDetailsPage.getPossibleDuplicateRow()[0].find_elements(By.TAG_NAME, "svg")
+            for ii in pageGrievanceDetailsPage.getPossibleDuplicateRowByUnicefId("IND-00-0000.0022").find_elements(
+                By.TAG_NAME, "svg"
+            )
         ]
         assert "people-icon" not in [
             ii.get_attribute("data-cy")
-            for ii in pageGrievanceDetailsPage.getPossibleDuplicateRow()[1].find_elements(By.TAG_NAME, "svg")
+            for ii in pageGrievanceDetailsPage.getPossibleDuplicateRowByUnicefId("IND-00-0000.0033").find_elements(
+                By.TAG_NAME, "svg"
+            )
         ]
         assert "person-icon" not in [
             ii.get_attribute("data-cy")
-            for ii in pageGrievanceDetailsPage.getPossibleDuplicateRow()[1].find_elements(By.TAG_NAME, "svg")
+            for ii in pageGrievanceDetailsPage.getPossibleDuplicateRowByUnicefId("IND-00-0000.0033").find_elements(
+                By.TAG_NAME, "svg"
+            )
         ]
-        pageGrievanceDetailsPage.getSelectCheckbox()[0].click()
+        pageGrievanceDetailsPage.getPossibleDuplicateRowByUnicefId("IND-00-0000.0033").find_element(
+            By.CSS_SELECTOR, 'input[type="checkbox"]'
+        ).click()
         pageGrievanceDetailsPage.getButtonMarkDistinct().click()
         pageGrievanceDetailsPage.getButtonConfirm().click()
         pageGrievanceDetailsPage.getPersonIcon()
-        pageGrievanceDetailsPage.getCheckboxIndividual().click()
-        pageGrievanceDetailsPage.getSelectCheckbox()[1].click()
+        pageGrievanceDetailsPage.getPossibleDuplicateRowByUnicefId("IND-00-0000.0011").find_element(
+            By.CSS_SELECTOR, 'input[type="checkbox"]'
+        ).click()
+        pageGrievanceDetailsPage.getPossibleDuplicateRowByUnicefId("IND-00-0000.0022").find_element(
+            By.CSS_SELECTOR, 'input[type="checkbox"]'
+        ).click()
         pageGrievanceDetailsPage.getButtonMarkDuplicate().click()
         pageGrievanceDetailsPage.getButtonConfirm().click()
         pageGrievanceDetailsPage.getPeopleIcon()
         assert "people-icon" in [
             ii.get_attribute("data-cy")
-            for ii in pageGrievanceDetailsPage.getPossibleDuplicateGoldenRow().find_elements(By.TAG_NAME, "svg")
+            for ii in pageGrievanceDetailsPage.getPossibleDuplicateRowByUnicefId("IND-00-0000.0011").find_elements(
+                By.TAG_NAME, "svg"
+            )
         ]
         assert "person-icon" in [
             ii.get_attribute("data-cy")
-            for ii in pageGrievanceDetailsPage.getPossibleDuplicateRow()[0].find_elements(By.TAG_NAME, "svg")
+            for ii in pageGrievanceDetailsPage.getPossibleDuplicateRowByUnicefId("IND-00-0000.0033").find_elements(
+                By.TAG_NAME, "svg"
+            )
         ]
         assert "people-icon" in [
             ii.get_attribute("data-cy")
-            for ii in pageGrievanceDetailsPage.getPossibleDuplicateRow()[1].find_elements(By.TAG_NAME, "svg")
+            for ii in pageGrievanceDetailsPage.getPossibleDuplicateRowByUnicefId("IND-00-0000.0022").find_elements(
+                By.TAG_NAME, "svg"
+            )
         ]
-        duplicated_individual_unicef_id = pageGrievanceDetailsPage.getPossibleDuplicateRow()[1].text.split(" ")[0]
+        duplicated_individual_unicef_id = "IND-00-0000.0022"
         pageGrievanceDetailsPage.getButtonCloseTicket().click()
         pageGrievanceDetailsPage.getButtonConfirm().click()
         pageGrievanceDetailsPage.disappearButtonConfirm()
+        pageGrievanceDetailsPage.disappearButtonCloseTicket()
 
         pageGrievanceDetailsPage.selectGlobalProgramFilter("Test Program")
         pageGrievanceDetailsPage.getNavProgrammePopulation().click()
@@ -1211,16 +1243,17 @@ class TestGrievanceTickets:
                 for icon in individual_row.find_elements(By.TAG_NAME, "svg"):
                     assert "Confirmed Duplicate" in icon.get_attribute("aria-label")
 
-    @pytest.mark.xfail(reason="Unskip after fix bug: 209087")
-    def test_grievance_tickets_create_new_error(
-        self,
-        pageGrievanceTickets: GrievanceTickets,
-        pageGrievanceNewTicket: NewTicket,
-        pageGrievanceDetailsPage: GrievanceDetailsPage,
-    ) -> None:
-        pageGrievanceTickets.getNavGrievance().click()
-        assert "Grievance Tickets" in pageGrievanceTickets.getGrievanceTitle().text
-        pageGrievanceTickets.getButtonNewTicket().click()
-        pageGrievanceNewTicket.getButtonNext().click()
-        with pytest.raises(Exception):
-            pageGrievanceNewTicket.getHouseholdTab()
+
+@pytest.mark.xfail(reason="Unskip after fix bug: 209087")
+def test_grievance_tickets_create_new_error(
+    self,
+    pageGrievanceTickets: GrievanceTickets,
+    pageGrievanceNewTicket: NewTicket,
+    pageGrievanceDetailsPage: GrievanceDetailsPage,
+) -> None:
+    pageGrievanceTickets.getNavGrievance().click()
+    assert "Grievance Tickets" in pageGrievanceTickets.getGrievanceTitle().text
+    pageGrievanceTickets.getButtonNewTicket().click()
+    pageGrievanceNewTicket.getButtonNext().click()
+    with pytest.raises(Exception):
+        pageGrievanceNewTicket.getHouseholdTab()

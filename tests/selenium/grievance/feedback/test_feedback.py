@@ -4,7 +4,6 @@ from django.conf import settings
 from django.core.management import call_command
 
 import pytest
-from pytest_django import DjangoDbBlocker
 from selenium.webdriver import Keys
 
 from hct_mis_api.apps.geo.models import Area, Country
@@ -28,25 +27,22 @@ pytestmark = pytest.mark.django_db(transaction=True)
 
 
 @pytest.fixture
-def add_feedbacks(django_db_setup: Generator[None, None, None], django_db_blocker: DjangoDbBlocker) -> None:
-    with django_db_blocker.unblock():
-        call_command("loaddata", f"{settings.PROJECT_ROOT}/apps/accountability/fixtures/data-cypress.json")
+def add_feedbacks() -> None:
+    call_command("loaddata", f"{settings.PROJECT_ROOT}/apps/accountability/fixtures/data-cypress.json")
     yield
 
 
 @pytest.fixture
-def add_households(django_db_setup: Generator[None, None, None], django_db_blocker: DjangoDbBlocker) -> None:
-    with django_db_blocker.unblock():
-        call_command("loaddata", f"{settings.PROJECT_ROOT}/apps/registration_data/fixtures/data-cypress.json")
-        call_command("loaddata", f"{settings.PROJECT_ROOT}/apps/household/fixtures/data-cypress.json")
+def add_households() -> None:
+    call_command("loaddata", f"{settings.PROJECT_ROOT}/apps/registration_data/fixtures/data-cypress.json")
+    call_command("loaddata", f"{settings.PROJECT_ROOT}/apps/household/fixtures/data-cypress.json")
     yield
 
 
 @pytest.fixture
-def create_programs(django_db_setup: Generator[None, None, None], django_db_blocker: DjangoDbBlocker) -> None:
-    with django_db_blocker.unblock():
-        call_command("loaddata", f"{settings.PROJECT_ROOT}/apps/core/fixtures/data-selenium.json")
-        call_command("loaddata", f"{settings.PROJECT_ROOT}/apps/program/fixtures/data-cypress.json")
+def create_programs() -> None:
+    call_command("loaddata", f"{settings.PROJECT_ROOT}/apps/core/fixtures/data-selenium.json")
+    call_command("loaddata", f"{settings.PROJECT_ROOT}/apps/program/fixtures/data-cypress.json")
     yield
 
 
@@ -62,7 +58,7 @@ def create_households_and_individuals() -> Household:
     hh.country_origin = Country.objects.filter(iso_code2="UA").first()
     hh.address = "Karta-e-Mamorin KABUL/5TH DISTRICT, Afghanistan"
     hh.admin1 = Area.objects.first()
-    hh.admin2 = Area.objects.get(name="Kaluskyi")
+    hh.admin2 = Area.objects.get(name="Shakardara")
     hh.save()
     hh.set_admin_areas()
     hh.refresh_from_db()
@@ -406,6 +402,9 @@ class TestFeedback:
         pageFeedback.getRow(0).click()
         assert "-" in pageFeedbackDetails.getProgramme().text
         pageFeedbackDetails.getButtonEdit().click()
+        from hct_mis_api.apps.program.models import Program
+
+        print(Program.objects.all())
         pageNewFeedback.selectProgramme("Draft Program")
         pageNewFeedback.getDescription().click()
         pageNewFeedback.getDescription().send_keys(Keys.CONTROL, "a")
@@ -413,7 +412,7 @@ class TestFeedback:
         pageNewFeedback.getComments().send_keys("New comment, new comment. New comment?")
         pageNewFeedback.getInputArea().send_keys("Abkamari")
         pageNewFeedback.getInputLanguage().send_keys("English")
-        pageNewFeedback.selectArea("Abband")
+        pageNewFeedback.selectArea("Shakardara")
         pageNewFeedback.getButtonNext().click()
         # Check edited Feedback
         assert "Draft Program" in pageFeedbackDetails.getProgramme().text
@@ -537,7 +536,7 @@ class TestFeedback:
         # ToDo: Uncomment after fix: 211708
         # assert "-" in pageNewFeedback.getLabelAdministrativeLevel1().text
         pageNewFeedback.getInputQuestionnaire_admin2().click()
-        assert "Kaluskyi" in pageNewFeedback.getLabelAdministrativeLevel2().text
+        assert "Shakardara" in pageNewFeedback.getLabelAdministrativeLevel2().text
         pageNewFeedback.getInputQuestionnaire_admin3().click()
         assert "-" in pageNewFeedback.getLabelAdministrativeLevel3().text
         pageNewFeedback.getInputQuestionnaire_admin4().click()
